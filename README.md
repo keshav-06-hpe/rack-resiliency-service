@@ -15,7 +15,7 @@ git clone https://github.com/keshav-06-hpe/rack-resiliency-service.git
 ```
 <br>
 Build the Docker image:
-   ```bash
+```bash
    docker build -t <your-dockerhub-username>/zone-lister:latest ./app
    docker push <your-dockerhub-username>/zone-lister:latest
 ```
