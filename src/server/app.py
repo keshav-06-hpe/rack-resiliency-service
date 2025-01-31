@@ -1,37 +1,52 @@
 import json
+import subprocess
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from collections import defaultdict
-from kubernetes import client, config
 
-PORT = 8080  # Set the port for the API
+PORT = 8080
 
 def get_zone_data():
-    """Fetch and parse Kubernetes node zone information using the Kubernetes Python client"""
     try:
-        # Load the in-cluster configuration
-        config.load_incluster_config()
-        v1 = client.CoreV1Api()
+        # Read the token from the file
+        with open("/var/run/secrets/kubernetes.io/serviceaccount/token", "r") as token_file:
+            token = token_file.read().strip()
 
-        # Fetch node information
-        nodes = v1.list_node()
+        curl_command = [
+            'curl', '-k',
+            '-H', f"Authorization: Bearer {token}",
+            'https://kubernetes.default.svc/api/v1/nodes'
+        ]
+        
+        # Run the curl command
+        result = subprocess.run(curl_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        print(result)
+        # Check if the command failed
+        if result.returncode != 0:
+            return {"error": f"Curl command failed: {result.stderr.strip()}"}
+
+        # If response is empty
+        if not result.stdout.strip():
+            return {"error": "Empty response from Kubernetes API"}
+
+        # Try parsing the JSON response
+        try:
+            nodes_data = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return {"error": "Invalid JSON response from Kubernetes API", "raw": result.stdout}
+
         zones = defaultdict(list)
-
-        for node in nodes.items:
-            zone = node.metadata.labels.get(
-                'topology.kubernetes.io/zone', 
-                'unassigned'
-            )
+        for node in nodes_data.get('items', []):
+            zone = node['metadata']['labels'].get('topology.kubernetes.io/zone', 'unassigned')
             zones[zone].append({
-                'name': node.metadata.name,
-                'status': node.status.conditions[-1].type if node.status.conditions else 'Unknown',
+                'name': node['metadata']['name'],
+                'status': node['status']['conditions'][-1]['type'] if node['status'].get('conditions') else 'Unknown',
                 'roles': ','.join(
-                    k for k, v in node.metadata.labels.items()
-                    if 'node-role.kubernetes.io/' in k
+                    k for k, v in node['metadata']['labels'].items() if 'node-role.kubernetes.io/' in k
                 ),
-                'age': node.metadata.creation_timestamp,
-                'version': node.status.node_info.kubelet_version,
-                'cpu': node.status.capacity.get('cpu', 'N/A'),
-                'memory': node.status.capacity.get('memory', 'N/A')
+                'age': node['metadata']['creationTimestamp'],
+                'version': node['status']['nodeInfo']['kubeletVersion'],
+                'cpu': node['status']['capacity'].get('cpu', 'N/A'),
+                'memory': node['status']['capacity'].get('memory', 'N/A')
             })
         return zones
     except Exception as e:
@@ -39,7 +54,6 @@ def get_zone_data():
 
 class RequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler"""
-
     def do_GET(self):
         if self.path == "/zones":
             self.send_response(200)
