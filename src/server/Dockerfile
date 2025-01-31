@@ -16,6 +16,7 @@ RUN curl --insecure -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/
     && chmod +x kubectl \
     && mv kubectl /usr/local/bin/kubectl
 
+RUN pip install kubernetes
 
 # Set the working directory in the container
 WORKDIR /src/server
@@ -26,4 +27,4 @@ COPY app.py .
 EXPOSE 8080
 
 # Run the server
-CMD ["python", "app.py"]
+CMD ["python3", "app.py"]
