@@ -1,0 +1,19 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: zone-virtualservice
+spec:
+  hosts:
+    - "*"  # Match all hosts
+  gateways:
+    - services/services-gateway
+    - services/customer-admin-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /zones  # Route requests with path /zones
+      route:
+        - destination:
+            host: k8s-zone-api  # Route to the Service
+            port:
+              number: 8080
