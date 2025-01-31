@@ -6,6 +6,12 @@ from collections import defaultdict
 PORT = 8080
 
 def get_zone_data():
+    """
+    Fetches zone data from the Kubernetes API.
+
+    Returns:
+        dict: A dictionary containing zone data or an error message.
+    """
     try:
         # Read the token from the file
         with open("/var/run/secrets/kubernetes.io/serviceaccount/token", "r") as token_file:
@@ -55,6 +61,51 @@ def get_zone_data():
 class RequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler"""
     def do_GET(self):
+        """
+        Handles GET requests.
+
+        ---
+        tags:
+          - Zones
+        summary: Get zone data
+        description: Returns zone data from the Kubernetes API.
+        responses:
+          200:
+            description: A JSON object containing zone data.
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    zone_name:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                          status:
+                            type: string
+                          roles:
+                            type: string
+                          age:
+                            type: string
+                          version:
+                            type: string
+                          cpu:
+                            type: string
+                          memory:
+                            type: string
+          404:
+            description: Not Found
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    error:
+                      type: string
+        """
         if self.path == "/zones":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
