@@ -5,6 +5,19 @@ from collections import defaultdict
 
 PORT = 8080
 
+def read_token():
+    """
+    Reads the Kubernetes service account token from the default location.
+
+    Returns:
+        str: The token as a string.
+    """
+    try:
+        with open("/var/run/secrets/kubernetes.io/serviceaccount/token", "r") as token_file:
+            return token_file.read().strip()
+    except Exception as e:
+        raise Exception(f"Failed to read token: {str(e)}")
+
 def get_zone_data():
     """
     Fetches zone data from the Kubernetes API.
@@ -13,10 +26,7 @@ def get_zone_data():
         dict: A dictionary containing zone data or an error message.
     """
     try:
-        # Read the token from the file
-        with open("/var/run/secrets/kubernetes.io/serviceaccount/token", "r") as token_file:
-            token = token_file.read().strip()
-
+        token = read_token()
         curl_command = [
             'curl', '-k',
             '-H', f"Authorization: Bearer {token}",
@@ -58,6 +68,98 @@ def get_zone_data():
     except Exception as e:
         return {"error": str(e)}
 
+def get_critical_pods():
+    """
+    Fetches critical pods (services) data from the Kubernetes API across all namespaces.
+
+    Returns:
+        dict: A dictionary containing critical pods data or an error message.
+    """
+    try:
+        token = read_token()
+        # Define the list of critical pods (services)
+        critical_pods = {
+            "K8s Control Plane Services": {
+                "kube-apiserver": [],
+                "kube-scheduler": [],
+                "kube-controller-manager": [],
+                "kube-proxy": [],
+                "coredns": []
+            },
+            "Networking": {
+                "slingshot-fabric-manager": []
+            },
+            "Work Load Manager": {
+                "pbs": [],
+                "slurm": []
+            },
+            "iscsi": [],
+            "ceph": [],
+            "etcd": [],
+            "postgres": [],
+            "nexus": [],
+            "cray-hbtd": []
+        }
+
+        # Fetch pods from all namespaces
+        curl_command = [
+            'curl', '-k',
+            '-H', f"Authorization: Bearer {token}",
+            'https://kubernetes.default.svc/api/v1/pods'
+        ]
+
+        # Run the curl command
+        result = subprocess.run(curl_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+
+        # Check if the command failed
+        if result.returncode != 0:
+            return {"error": f"Curl command failed: {result.stderr.strip()}"}
+
+        # If response is empty
+        if not result.stdout.strip():
+            return {"error": "Empty response from Kubernetes API"}
+
+        # Try parsing the JSON response
+        try:
+            pods_data = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return {"error": "Invalid JSON response from Kubernetes API", "raw": result.stdout}
+
+        # Filter and categorize critical pods
+        for pod in pods_data.get('items', []):
+            pod_name = pod['metadata']['name']
+            namespace = pod['metadata']['namespace']
+            status = pod['status']['phase']
+            node_name = pod['spec'].get('nodeName', 'N/A')
+            creation_timestamp = pod['metadata']['creationTimestamp']
+
+            # Check if the pod is a critical service
+            for category, services in critical_pods.items():
+                if isinstance(services, dict):
+                    for service_name in services:
+                        if service_name.lower() in pod_name.lower():
+                            critical_pods[category][service_name].append({
+                                'name': pod_name,
+                                'namespace': namespace,
+                                'status': status,
+                                'node_name': node_name,
+                                'creation_timestamp': creation_timestamp
+                            })
+                            break
+                elif isinstance(services, list):
+                    if category.lower() in pod_name.lower():
+                        critical_pods[category].append({
+                            'name': pod_name,
+                            'namespace': namespace,
+                            'status': status,
+                            'node_name': node_name,
+                            'creation_timestamp': creation_timestamp
+                        })
+
+        return critical_pods
+    except Exception as e:
+        return {"error": str(e)}
+
 class RequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler"""
     def do_GET(self):
@@ -67,11 +169,12 @@ class RequestHandler(BaseHTTPRequestHandler):
         ---
         tags:
           - Zones
-        summary: Get zone data
-        description: Returns zone data from the Kubernetes API.
+          - Critical Pods
+        summary: Get zone data or critical pods data
+        description: Returns zone data or critical pods data from the Kubernetes API.
         responses:
           200:
-            description: A JSON object containing zone data.
+            description: A JSON object containing zone data or critical pods data.
             content:
               application/json:
                 schema:
@@ -96,6 +199,228 @@ class RequestHandler(BaseHTTPRequestHandler):
                             type: string
                           memory:
                             type: string
+                    critical_pods:
+                      type: object
+                      properties:
+                        K8s Control Plane Services:
+                          type: object
+                          properties:
+                            kube-apiserver:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                  status:
+                                    type: string
+                                  node_name:
+                                    type: string
+                                  creation_timestamp:
+                                    type: string
+                            kube-scheduler:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                  status:
+                                    type: string
+                                  node_name:
+                                    type: string
+                                  creation_timestamp:
+                                    type: string
+                            kube-controller-manager:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                  status:
+                                    type: string
+                                  node_name:
+                                    type: string
+                                  creation_timestamp:
+                                    type: string
+                            kube-proxy:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                  status:
+                                    type: string
+                                  node_name:
+                                    type: string
+                                  creation_timestamp:
+                                    type: string
+                            coredns:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                  status:
+                                    type: string
+                                  node_name:
+                                    type: string
+                                  creation_timestamp:
+                                    type: string
+                        Networking:
+                          type: object
+                          properties:
+                            slingshot-fabric-manager:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                  status:
+                                    type: string
+                                  node_name:
+                                    type: string
+                                  creation_timestamp:
+                                    type: string
+                        Work Load Manager:
+                          type: object
+                          properties:
+                            pbs:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                  status:
+                                    type: string
+                                  node_name:
+                                    type: string
+                                  creation_timestamp:
+                                    type: string
+                            slurm:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                  status:
+                                    type: string
+                                  node_name:
+                                    type: string
+                                  creation_timestamp:
+                                    type: string
+                        iscsi:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                              status:
+                                type: string
+                              node_name:
+                                type: string
+                              creation_timestamp:
+                                type: string
+                        ceph:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                              status:
+                                type: string
+                              node_name:
+                                type: string
+                              creation_timestamp:
+                                type: string
+                        etcd:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                              status:
+                                type: string
+                              node_name:
+                                type: string
+                              creation_timestamp:
+                                type: string
+                        postgres:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                              status:
+                                type: string
+                              node_name:
+                                type: string
+                              creation_timestamp:
+                                type: string
+                        nexus:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                              status:
+                                type: string
+                              node_name:
+                                type: string
+                              creation_timestamp:
+                                type: string
+                        cray-hbtd:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                              status:
+                                type: string
+                              node_name:
+                                type: string
+                              creation_timestamp:
+                                type: string
           404:
             description: Not Found
             content:
@@ -111,6 +436,12 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             response = json.dumps(get_zone_data(), indent=2)
+            self.wfile.write(response.encode("utf-8"))
+        elif self.path == "/critical-pods":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            response = json.dumps(get_critical_pods(), indent=2)
             self.wfile.write(response.encode("utf-8"))
         else:
             self.send_response(404)

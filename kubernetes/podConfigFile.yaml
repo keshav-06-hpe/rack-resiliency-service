@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: k8s-zone-api
+  name: craycli-api
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: k8s-zone-api
+      app: craycli-api
   template:
     metadata:
       labels:
-        app: k8s-zone-api
+        app: craycli-api
     spec:
-      serviceAccountName: k8s-zone-reader
+      serviceAccountName: craycli-reader
       containers:
-      - name: k8s-zone-api
-        image: library/infofetch:1.0.3
+      - name: craycli-api
+        image: library/infofetch:1.0.5
         imagePullPolicy: Never
         ports:
         - containerPort: 8080
@@ -39,46 +39,46 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: k8s-zone-api
+  name: craycli-api
 spec:
   selector:
-    app: k8s-zone-api
+    app: craycli-api
   ports:
     - protocol: TCP
       port: 8080
       targetPort: 8080
-      nodePort: 30009
+      nodePort: 30090
   type: NodePort
 
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: k8s-zone-reader
+  name: craycli-reader
 automountServiceAccountToken: true
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: k8s-zone-role
+  name: craycli-role
   namespace: default
 rules:
 - apiGroups: [""]
-  resources: ["nodes"]
-  verbs: ["get", "list"]
+  resources: ["nodes", "pods", "services"]
+  verbs: ["get", "list", "watch"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: k8s-zone-rolebinding
+  name: craycli-rolebinding
   namespace: default
 subjects:
 - kind: ServiceAccount
-  name: k8s-zone-reader
+  name: craycli-reader
   namespace: default
 roleRef:
   kind: ClusterRole
-  name: k8s-zone-role
+  name: craycli-role
   apiGroup: rbac.authorization.k8s.io
