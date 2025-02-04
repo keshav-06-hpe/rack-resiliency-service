@@ -11,9 +11,18 @@ spec:
   http:
     - match:
         - uri:
-            prefix: /zones  # Route requests with path /zones
+            prefix: /zones
+
       route:
         - destination:
-            host: k8s-zone-api  # Route to the Service
+            host: rrs-api  # Route to the Service
+            port:
+              number: 8080
+    - match:
+        - uri:
+            prefix: /critical-pods
+      route:
+        - destination:
+            host: rrs-api  # Route to the Service
             port:
               number: 8080

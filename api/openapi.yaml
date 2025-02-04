@@ -3,9 +3,16 @@ info:
   title: Kubernetes Zone and Critical Pods API
   description: API to fetch zone data and critical pods data from Kubernetes.
   version: 1.0.0
+  license:
+    name: Hewlett Packard Enterprise Development LP
+    url: http://www.hpe.com/
 servers:
-  - url: http://localhost:8080
-    description: Local development server
+  - url: 'https://api-gw-service-nmn.local/zones'
+    description: The production RRS API server. Accessed from outside the mesh for getting the zone details.
+  - url: 'https://api-gw-service-nmn.local/critical-pods'
+    description: The production RRS API server. Accessed from outside the mesh for getting the list of critical-pods.
+  - url: 'cray-rrs.services.svc.cluster.local'
+    description: Accessed from inside the mesh.
 
 tags:
   - name: Zones
