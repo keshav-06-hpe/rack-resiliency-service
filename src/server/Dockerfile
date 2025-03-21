@@ -1,30 +1,35 @@
-FROM --platform=linux/amd64 python:3.9-slim as build
-# Use the SLES base image
-FROM registry.suse.com/suse/sle15:latest
-
-# Set environment variables
-ENV KUBECTL_VERSION=v1.28.0  
+FROM alpine:latest
 
 # Update package manager and install necessary dependencies
-RUN zypper refresh && \
-    zypper install -y curl ca-certificates python3 python3-pip && \
-    zypper clean && \
+RUN apk update && \
+    apk add --no-cache curl ca-certificates python3 py3-pip openssh && \
     update-ca-certificates
 
-# Install kubectl securely
-RUN curl --insecure -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
-    && chmod +x kubectl \
-    && mv kubectl /usr/local/bin/kubectl
+# Create and activate a virtual environment
+RUN python3 -m venv /venv
+ENV PATH="/venv/bin:$PATH"
 
-RUN pip install kubernetes
+# Enable and start SSH service (consider security implications)
+RUN mkdir -p /var/run/sshd && \
+    echo "PermitRootLogin yes" >> /etc/ssh/sshd_config && \
+    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/g' /etc/ssh/sshd_config && \
+    ssh-keygen -A
 
 # Set the working directory in the container
 WORKDIR /src/server
 
 # Copy the current directory contents into the container
-COPY app.py .
+COPY . .
 
-EXPOSE 8080
+# Install Python packages within the virtual environment
+RUN pip3 install --no-cache-dir -U pip -c constraints.txt && \
+    pip3 install --no-cache-dir -U wheel -c constraints.txt && \
+    pip3 install --no-cache-dir -r requirements.txt
 
-# Run the server
-CMD ["python3", "app.py"]
+EXPOSE 80 22
+
+# Set Flask environment variable
+ENV FLASK_APP=app.py
+
+# Start SSH and Flask app
+CMD /usr/sbin/sshd && flask run --host=0.0.0.0 --port=80
